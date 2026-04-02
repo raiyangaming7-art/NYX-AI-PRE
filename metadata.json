@@ -1,0 +1,5 @@
+{
+  "name": "Triple-API AI Orchestrator",
+  "description": "A powerful AI assistant that intelligently routes queries between Gemini 1.5 Flash, Groq Llama 3, and Tavily for real-time web intelligence.",
+  "requestFramePermissions": ["microphone", "camera", "geolocation"]
+}
