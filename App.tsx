@@ -1,7 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Paperclip, Send, Loader2, User, Bot, X, Settings, CheckCircle2, AlertCircle, ShieldCheck, Trash2, Mic, MicOff, Bird, Brain, Zap, Sword, Sparkles, ChevronDown, Plus, Search, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, MoreVertical, FileText, Camera, Volume2, VolumeX, MapPin, Cpu, Activity } from "lucide-react";
+import { Paperclip, Send, Loader2, User, Bot, X, Settings, CheckCircle2, AlertCircle, ShieldCheck, Trash2, Mic, MicOff, Bird, Brain, Zap, Sword, Sparkles, ChevronDown, Plus, Search, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, MoreVertical, FileText, Camera, Volume2, VolumeX, MapPin, Cpu, Activity, RotateCcw, LogOut, LogIn } from "lucide-react";
 import { motion, AnimatePresence, LayoutGroup } from "motion/react";
 import ReactMarkdown from "react-markdown";
+import { auth, googleProvider, db } from "./firebase";
+import { signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
+import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 
 interface Message {
   role: "user" | "assistant";
@@ -23,6 +26,7 @@ interface UserKeys {
   groq: string;
   tavily: string;
   openrouter: string;
+  mistral: string;
 }
 
 const NyxLogo = ({ className }: { className?: string }) => (
@@ -298,8 +302,8 @@ function RoleplayAura({ accent }: { accent: string }) {
   );
 }
 
-  const SlumberingTitanModal = ({ titan, onAwaken, onClose }: { titan: string; onAwaken: (model: "gemini" | "groq" | "deepseek" | "mistral") => void; onClose: () => void }) => {
-  const models: ("gemini" | "groq" | "deepseek" | "mistral")[] = ["gemini", "groq", "deepseek", "mistral"];
+  const SlumberingTitanModal = ({ titan, onAwaken, onClose }: { titan: string; onAwaken: (model: "gemini" | "groq" | "deepseek" | "qwen" | "mistral") => void; onClose: () => void }) => {
+  const models: ("gemini" | "groq" | "deepseek" | "qwen" | "mistral")[] = ["gemini", "groq", "deepseek", "qwen", "mistral"];
   const otherModels = models.filter(m => m !== titan);
 
   return (
@@ -372,7 +376,211 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
   }
 }
 
+const themes: any = {
+  normal: {
+    gemini: {
+      bg: "bg-[#0a0a0f]",
+      gradient: "from-blue-600/20 via-indigo-600/10 to-transparent",
+      accent: "blue",
+      accentColor: "bg-blue-600",
+      accentHover: "hover:bg-blue-500",
+      accentText: "text-blue-400",
+      accentBorder: "border-blue-500/30",
+      accentShadow: "shadow-blue-600/20",
+      logoGlow: "drop-shadow-[0_0_15px_rgba(37,99,235,0.3)]",
+      font: "font-sans",
+      secondaryBg: "bg-[#12121a]",
+      sidebarBg: "bg-[#0d0d14]"
+    },
+    groq: {
+      bg: "bg-[#0f0a0a]",
+      gradient: "from-orange-600/20 via-red-600/10 to-transparent",
+      accent: "orange",
+      accentColor: "bg-orange-600",
+      accentHover: "hover:bg-orange-500",
+      accentText: "text-orange-400",
+      accentBorder: "border-orange-500/30",
+      accentShadow: "shadow-orange-600/20",
+      logoGlow: "drop-shadow-[0_0_15px_rgba(234,88,12,0.3)]",
+      font: "font-sans",
+      secondaryBg: "bg-[#1a1212]",
+      sidebarBg: "bg-[#140d0d]"
+    },
+    deepseek: {
+      bg: "bg-[#0d0a0f]",
+      gradient: "from-purple-600/20 via-fuchsia-600/10 to-transparent",
+      accent: "purple",
+      accentColor: "bg-purple-600",
+      accentHover: "hover:bg-purple-500",
+      accentText: "text-purple-400",
+      accentBorder: "border-purple-500/30",
+      accentShadow: "shadow-purple-600/20",
+      logoGlow: "drop-shadow-[0_0_15px_rgba(147,51,234,0.3)]",
+      font: "font-sans",
+      secondaryBg: "bg-[#16121a]",
+      sidebarBg: "bg-[#110d14]"
+    },
+    mistral: {
+      bg: "bg-[#0a0f0d]",
+      gradient: "from-emerald-600/20 via-teal-600/10 to-transparent",
+      accent: "emerald",
+      accentColor: "bg-emerald-600",
+      accentHover: "hover:bg-emerald-500",
+      accentText: "text-emerald-400",
+      accentBorder: "border-emerald-500/30",
+      accentShadow: "shadow-emerald-600/20",
+      logoGlow: "drop-shadow-[0_0_15px_rgba(5,150,105,0.3)]",
+      font: "font-sans",
+      secondaryBg: "bg-[#121a16]",
+      sidebarBg: "bg-[#0d1411]"
+    },
+    qwen: {
+      bg: "bg-[#0a0d0f]",
+      gradient: "from-cyan-600/20 via-sky-600/10 to-transparent",
+      accent: "cyan",
+      accentColor: "bg-cyan-600",
+      accentHover: "hover:bg-cyan-500",
+      accentText: "text-cyan-400",
+      accentBorder: "border-cyan-500/30",
+      accentShadow: "shadow-cyan-600/20",
+      logoGlow: "drop-shadow-[0_0_15px_rgba(6,182,212,0.3)]",
+      font: "font-sans",
+      secondaryBg: "bg-[#12161a]",
+      sidebarBg: "bg-[#0d1114]"
+    }
+  },
+  roleplay: {
+    gemini: {
+      bg: "bg-[#0a0515]",
+      gradient: "from-purple-900/40 via-black to-black",
+      accent: "blue",
+      accentColor: "bg-blue-800",
+      accentHover: "hover:bg-blue-700",
+      accentText: "text-blue-300",
+      accentBorder: "border-blue-900/50",
+      accentShadow: "shadow-blue-900/40",
+      logoGlow: "drop-shadow-[0_0_20px_rgba(30,58,138,0.5)]",
+      font: "font-serif",
+      secondaryBg: "bg-[#08020d]",
+      sidebarBg: "bg-[#05010a]"
+    },
+    groq: {
+      bg: "bg-[#0a0515]",
+      gradient: "from-purple-900/40 via-black to-black",
+      accent: "red",
+      accentColor: "bg-red-800",
+      accentHover: "hover:bg-red-700",
+      accentText: "text-red-300",
+      accentBorder: "border-red-900/50",
+      accentShadow: "shadow-red-900/40",
+      logoGlow: "drop-shadow-[0_0_20px_rgba(127,29,29,0.5)]",
+      font: "font-serif",
+      secondaryBg: "bg-[#08020d]",
+      sidebarBg: "bg-[#05010a]"
+    },
+    deepseek: {
+      bg: "bg-[#0a0515]",
+      gradient: "from-purple-900/40 via-black to-black",
+      accent: "purple",
+      accentColor: "bg-purple-800",
+      accentHover: "hover:bg-purple-500",
+      accentText: "text-purple-300",
+      accentBorder: "border-purple-900/50",
+      accentShadow: "shadow-purple-900/40",
+      logoGlow: "drop-shadow-[0_0_20px_rgba(147,51,234,0.5)]",
+      font: "font-serif",
+      secondaryBg: "bg-[#08020d]",
+      sidebarBg: "bg-[#05010a]"
+    },
+    mistral: {
+      bg: "bg-[#0a0515]",
+      gradient: "from-purple-900/40 via-black to-black",
+      accent: "emerald",
+      accentColor: "bg-emerald-800",
+      accentHover: "hover:bg-emerald-700",
+      accentText: "text-emerald-300",
+      accentBorder: "border-emerald-900/50",
+      accentShadow: "shadow-emerald-900/40",
+      logoGlow: "drop-shadow-[0_0_20px_rgba(6,78,59,0.5)]",
+      font: "font-serif",
+      secondaryBg: "bg-[#08020d]",
+      sidebarBg: "bg-[#05010a]"
+    },
+    qwen: {
+      bg: "bg-[#0a0515]",
+      gradient: "from-purple-900/40 via-black to-black",
+      accent: "cyan",
+      accentColor: "bg-cyan-800",
+      accentHover: "hover:bg-cyan-700",
+      accentText: "text-cyan-300",
+      accentBorder: "border-cyan-900/50",
+      accentShadow: "shadow-cyan-900/40",
+      logoGlow: "drop-shadow-[0_0_20px_rgba(8,145,178,0.5)]",
+      font: "font-serif",
+      secondaryBg: "bg-[#08020d]",
+      sidebarBg: "bg-[#05010a]"
+    }
+  }
+};
+
+const inputBarAnimation = {
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0 }
+};
+
 function AppContent() {
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      setIsAuthLoading(false);
+      
+      if (firebaseUser) {
+        // Sync user to Firestore
+        const userRef = doc(db, "users", firebaseUser.uid);
+        try {
+          const userSnap = await getDoc(userRef);
+          if (!userSnap.exists()) {
+            await setDoc(userRef, {
+              uid: firebaseUser.uid,
+              displayName: firebaseUser.displayName,
+              email: firebaseUser.email,
+              photoURL: firebaseUser.photoURL,
+              role: "user",
+              createdAt: serverTimestamp(),
+            });
+          }
+        } catch (error) {
+          console.error("Error syncing user to Firestore:", error);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+      setToast({ message: "Successfully signed in with Google", type: "success" });
+    } catch (error: any) {
+      console.error("Login error:", error);
+      setToast({ message: "Failed to sign in: " + error.message, type: "error" });
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setToast({ message: "Successfully signed out", type: "success" });
+    } catch (error: any) {
+      console.error("Logout error:", error);
+      setToast({ message: "Failed to sign out: " + error.message, type: "error" });
+    }
+  };
+
+  const MAX_HISTORY_LENGTH = 150;
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
     const saved = localStorage.getItem("nyx_sessions");
     return saved ? JSON.parse(saved) : [];
@@ -388,14 +596,14 @@ function AppContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
-  const [configStatus, setConfigStatus] = useState<{ gemini: boolean; groq: boolean; tavily: boolean; openrouter: boolean } | null>(null);
+  const [configStatus, setConfigStatus] = useState<{ gemini: boolean; groq: boolean; tavily: boolean; openrouter: boolean; mistral: boolean } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showJournalClearConfirm, setShowJournalClearConfirm] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [thinkMode, setThinkMode] = useState(false);
   const [mode, setMode] = useState<"normal" | "roleplay">("normal");
-  const [selectedModel, setSelectedModel] = useState<"gemini" | "groq" | "deepseek" | "mistral">("gemini");
+  const [selectedModel, setSelectedModel] = useState<"gemini" | "groq" | "deepseek" | "qwen" | "mistral">("gemini");
   const [brainMode, setBrainMode] = useState(false);
   const [customPrompt, setCustomPrompt] = useState<string>(() => {
     return localStorage.getItem("nyx_custom_prompt") || "";
@@ -415,7 +623,7 @@ function AppContent() {
   });
   const [locationInfo, setLocationInfo] = useState<string | null>(null);
   const [latLong, setLatLong] = useState<string | null>(null);
-  const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
+  const [toast, setToast] = useState<{message: string, type: 'success' | 'error', action?: { label: string, onClick: () => void }} | null>(null);
   const [showJournal, setShowJournal] = useState(false);
   const recognitionRef = useRef<any>(null);
   const [userKeys, setUserKeys] = useState<UserKeys>(() => {
@@ -425,136 +633,16 @@ function AppContent() {
   const [testStatus, setTestStatus] = useState<Record<string, "idle" | "loading" | "success" | "error">>({
     gemini: "idle",
     groq: "idle",
-    tavily: "idle"
+    tavily: "idle",
+    openrouter: "idle",
+    mistral: "idle"
   });
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
-
   const isUnlocked = secretKey === "NYX-TITAN-2026";
-
   const [readingMessageIndex, setReadingMessageIndex] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-
   const [showModelDropdown, setShowModelDropdown] = useState(false);
-
-  const themes = {
-    normal: {
-      gemini: {
-        bg: "bg-[#0a0a0f]",
-        gradient: "from-blue-600/20 via-indigo-600/10 to-transparent",
-        accent: "blue",
-        accentColor: "bg-blue-600",
-        accentHover: "hover:bg-blue-500",
-        accentText: "text-blue-400",
-        accentBorder: "border-blue-500/30",
-        accentShadow: "shadow-blue-600/20",
-        logoGlow: "drop-shadow-[0_0_15px_rgba(37,99,235,0.3)]",
-        font: "font-sans",
-        secondaryBg: "bg-[#12121a]",
-        sidebarBg: "bg-[#0d0d14]"
-      },
-      groq: {
-        bg: "bg-[#0f0a0a]",
-        gradient: "from-orange-600/20 via-red-600/10 to-transparent",
-        accent: "orange",
-        accentColor: "bg-orange-600",
-        accentHover: "hover:bg-orange-500",
-        accentText: "text-orange-400",
-        accentBorder: "border-orange-500/30",
-        accentShadow: "shadow-orange-600/20",
-        logoGlow: "drop-shadow-[0_0_15px_rgba(234,88,12,0.3)]",
-        font: "font-sans",
-        secondaryBg: "bg-[#1a1212]",
-        sidebarBg: "bg-[#140d0d]"
-      },
-      deepseek: {
-        bg: "bg-[#0d0a0f]",
-        gradient: "from-purple-600/20 via-fuchsia-600/10 to-transparent",
-        accent: "purple",
-        accentColor: "bg-purple-600",
-        accentHover: "hover:bg-purple-500",
-        accentText: "text-purple-400",
-        accentBorder: "border-purple-500/30",
-        accentShadow: "shadow-purple-600/20",
-        logoGlow: "drop-shadow-[0_0_15px_rgba(147,51,234,0.3)]",
-        font: "font-sans",
-        secondaryBg: "bg-[#16121a]",
-        sidebarBg: "bg-[#110d14]"
-      },
-      mistral: {
-        bg: "bg-[#0a0f0d]",
-        gradient: "from-emerald-600/20 via-teal-600/10 to-transparent",
-        accent: "emerald",
-        accentColor: "bg-emerald-600",
-        accentHover: "hover:bg-emerald-500",
-        accentText: "text-emerald-400",
-        accentBorder: "border-emerald-500/30",
-        accentShadow: "shadow-emerald-600/20",
-        logoGlow: "drop-shadow-[0_0_15px_rgba(5,150,105,0.3)]",
-        font: "font-sans",
-        secondaryBg: "bg-[#121a16]",
-        sidebarBg: "bg-[#0d1411]"
-      }
-    },
-    roleplay: {
-      gemini: {
-        bg: "bg-[#0a0515]",
-        gradient: "from-purple-900/40 via-black to-black",
-        accent: "blue",
-        accentColor: "bg-blue-800",
-        accentHover: "hover:bg-blue-700",
-        accentText: "text-blue-300",
-        accentBorder: "border-blue-900/50",
-        accentShadow: "shadow-blue-900/40",
-        logoGlow: "drop-shadow-[0_0_20px_rgba(30,58,138,0.5)]",
-        font: "font-serif",
-        secondaryBg: "bg-[#08020d]",
-        sidebarBg: "bg-[#05010a]"
-      },
-      groq: {
-        bg: "bg-[#0a0515]",
-        gradient: "from-purple-900/40 via-black to-black",
-        accent: "red",
-        accentColor: "bg-red-800",
-        accentHover: "hover:bg-red-700",
-        accentText: "text-red-300",
-        accentBorder: "border-red-900/50",
-        accentShadow: "shadow-red-900/40",
-        logoGlow: "drop-shadow-[0_0_20px_rgba(127,29,29,0.5)]",
-        font: "font-serif",
-        secondaryBg: "bg-[#08020d]",
-        sidebarBg: "bg-[#05010a]"
-      },
-      deepseek: {
-        bg: "bg-[#0a0515]",
-        gradient: "from-purple-900/40 via-black to-black",
-        accent: "purple",
-        accentColor: "bg-purple-800",
-        accentHover: "hover:bg-purple-500",
-        accentText: "text-purple-300",
-        accentBorder: "border-purple-900/50",
-        accentShadow: "shadow-purple-900/40",
-        logoGlow: "drop-shadow-[0_0_20px_rgba(147,51,234,0.5)]",
-        font: "font-serif",
-        secondaryBg: "bg-[#08020d]",
-        sidebarBg: "bg-[#05010a]"
-      },
-      mistral: {
-        bg: "bg-[#0a0515]",
-        gradient: "from-purple-900/40 via-black to-black",
-        accent: "emerald",
-        accentColor: "bg-emerald-800",
-        accentHover: "hover:bg-emerald-700",
-        accentText: "text-emerald-300",
-        accentBorder: "border-emerald-900/50",
-        accentShadow: "shadow-emerald-900/40",
-        logoGlow: "drop-shadow-[0_0_20px_rgba(6,78,59,0.5)]",
-        font: "font-serif",
-        secondaryBg: "bg-[#08020d]",
-        sidebarBg: "bg-[#05010a]"
-      }
-    }
-  };
 
   const currentTheme = themes[mode][selectedModel];
 
@@ -562,7 +650,8 @@ function AppContent() {
     gemini: { name: "Gemini", color: currentTheme.accentColor, text: currentTheme.accentText, border: currentTheme.accentBorder },
     groq: { name: "Groq", color: currentTheme.accentColor, text: currentTheme.accentText, border: currentTheme.accentBorder },
     deepseek: { name: "DeepSeek", color: currentTheme.accentColor, text: currentTheme.accentText, border: currentTheme.accentBorder },
-    mistral: { name: "Mistral", color: currentTheme.accentColor, text: currentTheme.accentText, border: currentTheme.accentBorder }
+    mistral: { name: "Mistral", color: currentTheme.accentColor, text: currentTheme.accentText, border: currentTheme.accentBorder },
+    qwen: { name: "Qwen", color: currentTheme.accentColor, text: currentTheme.accentText, border: currentTheme.accentBorder }
   };
 
   const handleReadAloud = async (text: string, index: number) => {
@@ -578,7 +667,13 @@ function AppContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
+        redirect: "manual",
+        credentials: "include"
       });
+
+      if (response.type === "opaqueredirect" || [301, 302, 307, 308].includes(response.status)) {
+        throw new Error("Session expired or security check required. Please refresh the page.");
+      }
 
       if (!response.ok) throw new Error("TTS failed");
 
@@ -596,8 +691,14 @@ function AppContent() {
         audioObj.play();
         audioObj.onended = () => setReadingMessageIndex(null);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Read aloud error:", error);
+      const isSessionError = error.message.includes("Session expired") || error.message.includes("security check");
+      setToast({ 
+        message: error.message || "Read aloud failed", 
+        type: "error",
+        action: isSessionError ? { label: "Fix Session", onClick: fixSession } : undefined
+      });
       setReadingMessageIndex(null);
     }
   };
@@ -606,24 +707,39 @@ function AppContent() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const adjustTextareaHeight = () => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setInput(val);
+    
+    // Immediate height adjustment for responsiveness
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
     }
   };
 
-  useEffect(() => {
-    adjustTextareaHeight();
-  }, [input]);
-
   const checkConfig = async () => {
     try {
-      const res = await fetch("/api/config-status");
+      const res = await fetch("/api/config-status", {
+        redirect: "manual",
+        credentials: "include"
+      });
+      if (res.type === "opaqueredirect" || [301, 302, 307, 308].includes(res.status)) {
+        console.warn("Config check redirected. Session might be expired.");
+        return;
+      }
       const data = await res.json();
       setConfigStatus(data);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Failed to check config status");
+      const isSessionError = e.message?.includes("Session expired") || e.message?.includes("security check");
+      if (isSessionError) {
+        setToast({ 
+          message: "Session check required. System functionality may be limited.", 
+          type: "error",
+          action: { label: "Fix Session", onClick: fixSession }
+        });
+      }
     }
   };
 
@@ -732,6 +848,12 @@ function AppContent() {
     requestLocation();
   };
 
+  const fixSession = () => {
+    // Opening the app in a new tab often fixes session/cookie issues in iframes
+    window.open(window.location.href, '_blank');
+    setToast({ message: "System re-authentication initiated. Please check the new tab, then return here and refresh.", type: "success" });
+  };
+
   // Load messages when currentSessionId changes
   useEffect(() => {
     if (currentSessionId) {
@@ -748,6 +870,16 @@ function AppContent() {
   useEffect(() => {
     if (sessions.length === 0 && !currentSessionId) {
       createNewChat();
+    }
+  }, []);
+
+  useEffect(() => {
+    // Set max chat limit to 150 and start a new session as requested
+    const hasStartedNewSession = localStorage.getItem("nyx_limit_150_applied");
+    if (!hasStartedNewSession) {
+      createNewChat();
+      setToast({ message: "Max chat limit set to 150. Starting new session.", type: "success" });
+      localStorage.setItem("nyx_limit_150_applied", "true");
     }
   }, []);
 
@@ -792,17 +924,18 @@ function AppContent() {
   };
 
   const updateSessionMessages = (id: string, newMessages: Message[]) => {
+    const truncatedMessages = newMessages.length > MAX_HISTORY_LENGTH ? newMessages.slice(-MAX_HISTORY_LENGTH) : newMessages;
     setSessions(prev => prev.map(s => {
       if (s.id === id) {
         let title = s.title;
-        if (s.title === "New Chat" && newMessages.length > 0) {
-          const firstUserMsg = newMessages.find(m => m.role === "user");
+        if (s.title === "New Chat" && truncatedMessages.length > 0) {
+          const firstUserMsg = truncatedMessages.find(m => m.role === "user");
           if (firstUserMsg) {
             title = firstUserMsg.content.split(" ").slice(0, 5).join(" ");
             if (firstUserMsg.content.split(" ").length > 5) title += "...";
           }
         }
-        return { ...s, messages: newMessages, title, updatedAt: Date.now() };
+        return { ...s, messages: truncatedMessages, title, updatedAt: Date.now() };
       }
       return s;
     }));
@@ -895,8 +1028,15 @@ function AppContent() {
       const res = await fetch("/api/test-connection", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, key })
+        body: JSON.stringify({ type, key }),
+        redirect: "manual",
+        credentials: "include"
       });
+
+      if (res.type === "opaqueredirect" || [301, 302, 307, 308].includes(res.status)) {
+        throw new Error("Session expired or security check required. Please refresh the page.");
+      }
+
       const data = await res.json();
       if (res.ok) {
         setTestStatus(prev => ({ ...prev, [type]: "success" }));
@@ -907,7 +1047,15 @@ function AppContent() {
       }
     } catch (e: any) {
       setTestStatus(prev => ({ ...prev, [type]: "error" }));
+      const isSessionError = e.message.includes("Session expired") || e.message.includes("security check");
       setSettingsError(e.message || "Connection failed");
+      if (isSessionError) {
+        setToast({ 
+          message: e.message, 
+          type: "error",
+          action: { label: "Fix Session", onClick: fixSession }
+        });
+      }
     }
   };
 
@@ -929,8 +1077,8 @@ function AppContent() {
     proceedWithSend();
   };
 
-  const getRoutedModel = (input: string): "groq" | "gemini" | "mistral" | "deepseek" => {
-    if (brainMode) return "gemini";
+  const getRoutedModel = (input: string): "groq" | "gemini" | "mistral" | "deepseek" | "qwen" => {
+    if (brainMode) return "groq";
     
     const lowerInput = input.toLowerCase();
     const simpleKeywords = ["hi", "hello", "how are you", "joke", "tell me a joke", "who are you", "what's up", "hey"];
@@ -951,43 +1099,72 @@ function AppContent() {
       return "gemini";
     }
     
+    if (lowerInput.includes("qwen") || lowerInput.includes("ali")) {
+      return "qwen";
+    }
+
     return "deepseek";
   };
 
-  const proceedWithSend = async (retryWithModel?: "gemini" | "groq" | "deepseek" | "mistral") => {
+  const handleRetry = async () => {
+    if (isLoading || messages.length === 0) return;
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg.role !== "assistant") return;
+
+    const historyWithoutLast = messages.slice(0, -1);
+    await proceedWithSend(selectedModel, historyWithoutLast);
+  };
+
+  const proceedWithSend = async (retryWithModel?: "gemini" | "groq" | "deepseek" | "qwen" | "mistral", customHistory?: Message[]) => {
     setSlumberingTitan(null);
-    // Convert files to base64 for local storage persistence
-    const filePromises = files.map(file => {
-      return new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-    });
-
-    const imageBase64s = await Promise.all(filePromises);
-
-    const userMessage: Message = { 
-      role: "user", 
-      content: input,
-      images: imageBase64s.length > 0 ? imageBase64s : undefined
-    };
     
-    const updatedMessages = retryWithModel ? messages : [...messages, userMessage];
-    if (!retryWithModel) {
+    let updatedMessages: Message[];
+    let currentInput: string;
+    let currentFiles: File[] = [];
+
+    if (customHistory) {
+      updatedMessages = customHistory;
+      currentInput = customHistory[customHistory.length - 1].content;
       setMessages(updatedMessages);
       if (currentSessionId) {
         updateSessionMessages(currentSessionId, updatedMessages);
       }
-    }
-    
-    const currentInput = retryWithModel ? messages[messages.length - 1].content : input;
-    const currentFiles = retryWithModel ? [] : [...files];
-    
-    if (!retryWithModel) {
+    } else if (retryWithModel) {
+      updatedMessages = messages;
+      currentInput = messages[messages.length - 1].content;
+    } else {
+      // Convert files to base64 for local storage persistence
+      const filePromises = files.map(file => {
+        return new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+      });
+
+      const imageBase64s = await Promise.all(filePromises);
+
+      const userMessage: Message = { 
+        role: "user", 
+        content: input,
+        images: imageBase64s.length > 0 ? imageBase64s : undefined
+      };
+      
+      updatedMessages = [...messages, userMessage];
+      if (updatedMessages.length > MAX_HISTORY_LENGTH) {
+        updatedMessages = updatedMessages.slice(-MAX_HISTORY_LENGTH);
+      }
+      currentInput = input;
+      currentFiles = [...files];
+      
+      setMessages(updatedMessages);
+      if (currentSessionId) {
+        updateSessionMessages(currentSessionId, updatedMessages);
+      }
       setInput("");
       setFiles([]);
     }
+
     setIsLoading(true);
     setIsSearching(true);
 
@@ -1011,13 +1188,37 @@ function AppContent() {
     currentFiles.forEach((file) => formData.append("files", file));
 
     try {
-      const response = await fetch(`${window.location.origin}/api/chat`, {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+
+      const response = await fetch("/api/chat", {
         method: "POST",
         body: formData,
+        signal: controller.signal,
+        redirect: "manual",
+        credentials: "include"
       });
 
+      clearTimeout(timeoutId);
+
+      if (response.type === "opaqueredirect" || [301, 302, 307, 308].includes(response.status)) {
+        throw new Error("Session expired or security check required. Please refresh the page to continue.");
+      }
+
       if (!response.ok) {
-        // Fallback logic for Groq
+        // Brain Mode Fallback Chain: Groq -> DeepSeek -> Gemini -> Qwen -> Mistral
+        if (brainMode) {
+          if (routedModel === "groq") {
+            setShowGoldenRiver(true);
+            setTimeout(() => setShowGoldenRiver(false), 2000);
+            return proceedWithSend("deepseek");
+          }
+          if (routedModel === "deepseek") return proceedWithSend("gemini");
+          if (routedModel === "gemini") return proceedWithSend("qwen");
+          if (routedModel === "qwen") return proceedWithSend("mistral");
+        }
+
+        // Legacy Fallback logic for Groq (non-brain mode)
         if (routedModel === "groq" && !retryWithModel) {
           setShowGoldenRiver(true);
           setTimeout(() => setShowGoldenRiver(false), 2000);
@@ -1047,11 +1248,12 @@ function AppContent() {
 
       const contentType = response.headers.get("Content-Type");
       if (contentType && contentType.includes("text/html")) {
-        const isRedirected = response.url && !response.url.includes("/api/chat");
+        const responseUrl = response.url || "/api/chat";
+        const isRedirected = responseUrl && !responseUrl.includes("/api/chat");
         if (isRedirected) {
-          throw new Error("The request was redirected to an HTML page (likely the login or home page). Your session may have expired. Please refresh the page and try again.");
+          throw new Error(`The request was redirected to an unexpected page: ${responseUrl}. This usually happens when a session expires or a proxy intervenes. Please refresh the page.`);
         }
-        throw new Error("The server unexpectedly returned an HTML response instead of a chat stream. This usually happens when a security check is triggered or a route is misconfigured. Please refresh the page.");
+        throw new Error("The server returned an HTML response instead of a chat stream. This might be due to a server-side error or a misconfigured route. Please refresh the page.");
       }
 
       const reader = response.body?.getReader();
@@ -1076,7 +1278,7 @@ function AppContent() {
         if (assistantMessage.includes("[BACKUP_SWITCH]")) {
           setBackupNotification(true);
           setTimeout(() => setBackupNotification(false), 3000);
-          assistantMessage = assistantMessage.replace("[BACKUP_SWITCH]", "");
+          assistantMessage = assistantMessage.replaceAll("[BACKUP_SWITCH]", "");
         }
 
         // Check for journal updates
@@ -1127,16 +1329,37 @@ function AppContent() {
     } catch (error: any) {
       console.error("Chat error:", error);
       setSlumberingTitan(routedModel);
+      
+      let errorMessage = error.message || "Something went wrong. Please try again.";
+      let troubleshooting = [
+        "Check your API keys in **Settings**.",
+        "Ensure you have a stable internet connection.",
+        "If the issue persists, try refreshing the page."
+      ];
+
+      if (error.name === 'AbortError') {
+        errorMessage = "Request timed out. The server took too long to respond (over 2 minutes).";
+        troubleshooting.unshift("Try a shorter message or a different model.");
+      } else if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+        errorMessage = "Network error: Failed to connect to the server. This could be due to a server crash, a timeout, or a proxy issue.";
+        troubleshooting.unshift("Check if the server is still running.");
+      }
+
       if (retryWithModel) {
         setMessages((prev) => [
           ...prev,
           { 
             role: "assistant", 
-            content: `### ❌ System Error\n\n${error.message || "Something went wrong. Please try again."}\n\n**Troubleshooting:**\n- Check your API keys in **Settings**.\n- Ensure you have a stable internet connection.\n- If the issue persists, try refreshing the page.` 
+            content: `### ❌ System Error\n\n${errorMessage}\n\n**Troubleshooting:**\n${troubleshooting.map(t => `- ${t}`).join("\n")}` 
           },
         ]);
       } else {
-        setToast({ message: error.message || "An unexpected error occurred", type: "error" });
+        const isSessionError = errorMessage.includes("Session expired") || errorMessage.includes("security check");
+        setToast({ 
+          message: errorMessage, 
+          type: "error",
+          action: isSessionError ? { label: "Fix Session", onClick: fixSession } : undefined
+        });
       }
     } finally {
       setIsLoading(false);
@@ -1396,7 +1619,45 @@ function AppContent() {
           </div>
 
           {/* Sidebar Footer */}
-          <div className="mt-auto pt-4 border-t border-white/5 space-y-4">
+          <div className="mt-auto pt-4 border-t border-white/5 space-y-3">
+            {/* Auth Button */}
+            {isAuthLoading ? (
+              <div className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-white/10 animate-pulse">
+                <Loader2 className="w-4 h-4 text-gray-500 animate-spin" />
+                <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Loading...</span>
+              </div>
+            ) : user ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-white/5 border border-white/10">
+                  <img 
+                    src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName || 'User'}&background=random`} 
+                    alt="User" 
+                    className="w-6 h-6 rounded-full border border-white/20"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[10px] font-bold text-white truncate">{user.displayName}</span>
+                    <span className="text-[9px] text-gray-500 truncate">{user.email}</span>
+                  </div>
+                </div>
+                <button 
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all group"
+                >
+                  <LogOut className="w-4 h-4 text-red-500 group-hover:text-red-400 transition-colors" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-red-400 group-hover:text-red-300">Sign Out</span>
+                </button>
+              </div>
+            ) : (
+              <button 
+                onClick={handleLogin}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600/30 transition-all group"
+              >
+                <LogIn className="w-4 h-4 text-blue-400 group-hover:text-blue-300 transition-colors" />
+                <span className="text-xs font-bold uppercase tracking-widest text-blue-400 group-hover:text-blue-300">Sign In with Google</span>
+              </button>
+            )}
+
             {/* Settings Button */}
             <button 
               onClick={() => setShowSettings(true)}
@@ -1493,18 +1754,28 @@ function AppContent() {
                   : "bg-red-500/20 border-red-500/30 text-red-400"
               }`}
             >
-              {toast.type === "success" ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
-              <span className="text-sm font-bold tracking-wide">{toast.message}</span>
-              <button onClick={() => setToast(null)} className="ml-auto p-1 hover:bg-white/10 rounded-lg transition-all">
-                <X className="w-4 h-4" />
-              </button>
+              {toast.type === "success" ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <AlertCircle className="w-5 h-5 shrink-0" />}
+              <span className="text-sm font-bold tracking-wide leading-tight">{toast.message}</span>
+              <div className="flex items-center gap-2 ml-auto">
+                {toast.action && (
+                  <button 
+                    onClick={toast.action.onClick}
+                    className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all whitespace-nowrap"
+                  >
+                    {toast.action.label}
+                  </button>
+                )}
+                <button onClick={() => setToast(null)} className="p-1 hover:bg-white/10 rounded-lg transition-all">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* Header */}
-        <header className={`flex items-center justify-between px-6 py-4 border-b border-white/5 ${currentTheme.bg}/80 backdrop-blur-xl sticky top-0 z-30 transition-colors duration-500`}>
-          <div className="flex items-center gap-4">
+        <header className={`flex items-center justify-between px-3 sm:px-6 py-2 sm:py-4 border-b border-white/5 ${currentTheme.bg}/80 backdrop-blur-xl sticky top-0 z-30 transition-colors duration-500`}>
+          <div className="flex items-center gap-2 sm:gap-4">
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
@@ -1514,14 +1785,14 @@ function AppContent() {
             >
               {isSidebarOpen ? <PanelLeftClose className="w-5 h-5" /> : <PanelLeftOpen className="w-5 h-5" />}
             </motion.button>
-            <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-xl bg-gradient-to-br from-gray-900 to-black flex items-center justify-center shadow-lg border border-white/10 ${currentTheme.accentShadow}`}>
-                <NyxLogo className={`w-6 h-6 ${currentTheme.logoGlow}`} />
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-gray-900 to-black flex items-center justify-center shadow-lg border border-white/10 ${currentTheme.accentShadow}`}>
+                <NyxLogo className={`w-5 h-5 sm:w-6 sm:h-6 ${currentTheme.logoGlow}`} />
               </div>
-              <span className="font-bold tracking-[0.2em] text-lg bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent uppercase">NYX AI</span>
+              <span className="hidden min-[400px]:block font-bold tracking-[0.2em] text-sm sm:text-lg bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent uppercase">NYX AI</span>
             </div>
           </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           {isConfigComplete && (
             <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-white/5 rounded-full border border-white/10">
               <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
@@ -1544,60 +1815,60 @@ function AppContent() {
                 setThinkMode(newState);
                 setBrainMode(newState);
               }}
-              className={`p-2 rounded-lg transition-all flex items-center gap-1 ${
+              className={`p-1.5 sm:p-2 rounded-lg transition-all flex items-center gap-1 ${
                 thinkMode 
                   ? "text-yellow-400 bg-yellow-400/10 border border-yellow-400/20 shadow-[0_0_15px_rgba(250,204,21,0.1)]" 
                   : "text-gray-400 hover:text-yellow-400 hover:bg-white/5"
               }`}
               title={thinkMode ? (isUnlocked ? "Triple Check: ON" : "Brain Mode: ON") : "Brain Mode: OFF"}
             >
-              {thinkMode ? <Brain className="w-5 h-5 animate-pulse" /> : <Zap className="w-5 h-5" />}
+              {thinkMode ? <Brain className="w-4 h-4 sm:w-5 sm:h-5 animate-pulse" /> : <Zap className="w-4 h-4 sm:w-5 sm:h-5" />}
             </button>
-            <span className="text-[9px] font-bold uppercase tracking-tighter text-gray-500 mt-0.5">{isUnlocked ? "Triple Check" : "Brain Mode"}</span>
+            <span className="hidden min-[450px]:block text-[9px] font-bold uppercase tracking-tighter text-gray-500 mt-0.5">{isUnlocked ? "Triple Check" : "Brain Mode"}</span>
           </div>
 
           <div className="flex flex-col items-center">
             <button 
               onClick={toggleRoleplay}
-              className={`p-2 transition-all rounded-lg ${
+              className={`p-1.5 sm:p-2 transition-all rounded-lg ${
                 mode === "roleplay"
                   ? "text-purple-400 bg-purple-400/10 border border-purple-400/20 shadow-[0_0_15px_rgba(168,85,247,0.1)]" 
                   : "text-gray-400 hover:text-purple-400 hover:bg-white/5"
               }`}
               title={mode === "roleplay" ? "Roleplay Mode: ON" : "Roleplay Mode: OFF"}
             >
-              {mode === "roleplay" ? <Activity className="w-5 h-5 animate-pulse text-red-500" /> : <Sword className="w-5 h-5" />}
+              {mode === "roleplay" ? <Activity className="w-4 h-4 sm:w-5 sm:h-5 animate-pulse text-red-500" /> : <Sword className="w-4 h-4 sm:w-5 sm:h-5" />}
             </button>
-            <span className="text-[9px] font-bold uppercase tracking-tighter text-gray-500 mt-0.5">Roleplay</span>
+            <span className="hidden min-[450px]:block text-[9px] font-bold uppercase tracking-tighter text-gray-500 mt-0.5">Roleplay</span>
           </div>
 
           <div className="flex flex-col items-center">
             <button 
               onClick={() => locationEnabled ? setLocationEnabled(false) : requestLocation()}
-              className={`p-2 transition-all rounded-lg ${
+              className={`p-1.5 sm:p-2 transition-all rounded-lg ${
                 locationEnabled
                   ? `${currentTheme.accentText} ${currentTheme.accentColor}/10 ${currentTheme.accentBorder} shadow-[0_0_15px_rgba(59,130,246,0.1)]` 
                   : "text-gray-400 hover:text-blue-400 hover:bg-white/5"
               }`}
               title={locationEnabled ? "Location: Active" : "Location: Inactive"}
             >
-              <MapPin className={`w-5 h-5 ${locationEnabled ? "animate-pulse" : ""}`} />
+              <MapPin className={`w-4 h-4 sm:w-5 sm:h-5 ${locationEnabled ? "animate-pulse" : ""}`} />
             </button>
-            <span className="text-[9px] font-bold uppercase tracking-tighter text-gray-500 mt-0.5">GPS</span>
+            <span className="hidden min-[450px]:block text-[9px] font-bold uppercase tracking-tighter text-gray-500 mt-0.5">GPS</span>
           </div>
 
           {/* AI Model Custom Dropdown */}
-          <div className="relative ml-2">
-            <label className="text-[9px] font-bold uppercase tracking-tighter text-gray-500 mb-1 block">Titan</label>
+          <div className="relative ml-1 sm:ml-2 flex-shrink-0">
+            <label className="hidden min-[450px]:block text-[9px] font-bold uppercase tracking-tighter text-gray-500 mb-1">Titan</label>
             <button
               onClick={() => setShowModelDropdown(!showModelDropdown)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all group ${currentTheme.accentBorder}`}
+              className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all group ${currentTheme.accentBorder}`}
             >
-              <div className={`w-2 h-2 rounded-full ${currentTheme.accentColor} animate-pulse shadow-[0_0_8px_rgba(255,255,255,0.2)]`} />
-              <span className={`text-[10px] font-bold uppercase tracking-widest ${currentTheme.accentText}`}>
+              <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${currentTheme.accentColor} animate-pulse shadow-[0_0_8px_rgba(255,255,255,0.2)]`} />
+              <span className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-widest ${currentTheme.accentText}`}>
                 {modelConfigs[selectedModel].name}
               </span>
-              <ChevronDown className={`w-3 h-3 text-gray-500 transition-transform duration-300 ${showModelDropdown ? "rotate-180" : ""}`} />
+              <ChevronDown className={`w-2.5 h-2.5 sm:w-3 sm:h-3 text-gray-500 transition-transform duration-300 ${showModelDropdown ? "rotate-180" : ""}`} />
             </button>
 
             <AnimatePresence>
@@ -1766,7 +2037,8 @@ function AppContent() {
                 {[
                   { id: "gemini", label: "Gemini API Key", placeholder: "AIza...", desc: "Primary Brain", system: configStatus?.gemini },
                   { id: "groq", label: "Groq API Key", placeholder: "gsk_...", desc: "High-speed Chat", system: configStatus?.groq },
-                  { id: "openrouter", label: "OpenRouter API Key", placeholder: "sk-or-...", desc: "DeepSeek & Mistral", system: configStatus?.openrouter },
+                  { id: "mistral", label: "Mistral API Key", placeholder: "mistral_...", desc: "Official Mistral", system: configStatus?.mistral },
+                  { id: "openrouter", label: "OpenRouter API Key", placeholder: "sk-or-...", desc: "DeepSeek & Qwen", system: configStatus?.openrouter },
                   { id: "tavily", label: "Tavily API Key", placeholder: "tvly-...", desc: "Web Search", system: configStatus?.tavily }
                 ].map((field) => (
                   <div key={field.id} className="space-y-2">
@@ -2035,7 +2307,18 @@ function AppContent() {
                         </div>
 
                         {msg.role === "assistant" && (
-                          <div className="mt-3 pt-3 border-t border-white/5 flex justify-end">
+                          <div className="mt-3 pt-3 border-t border-white/5 flex justify-end gap-2">
+                            {i === messages.length - 1 && !isLoading && (
+                              <motion.button
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={handleRetry}
+                                className={`p-1.5 rounded-lg transition-all text-gray-500 hover:${currentTheme.accentText} hover:${currentTheme.accentColor}/10`}
+                                title="Regenerate response"
+                              >
+                                <RotateCcw className="w-4 h-4" />
+                              </motion.button>
+                            )}
                             <motion.button
                               whileHover={{ scale: 1.1 }}
                               whileTap={{ scale: 0.9 }}
@@ -2212,7 +2495,7 @@ function AppContent() {
               />
               <textarea
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={handleInputChange}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
